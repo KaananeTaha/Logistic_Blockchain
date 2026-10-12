@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traçabilité logistique</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Traçabilité logistique · Blockchain</h1>
+    <span class="muted" id="network">Connexion…</span>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <!-- Fournisseur : Fct1 -->
+  <section data-panel="supplier" hidden>
+    <div class="grid">
+      <form class="card" id="create-form">
+        <h2>Créer un lot</h2>
+        <label>Nature de la marchandise</label>
+        <input name="nature" value="Vaccins antigrippaux" required>
+        <div class="row">
+          <div><label>Quantité</label><input name="quantity" type="number" value="500" min="1" required></div>
+          <div><label>Délai de livraison (min)</label><input name="deadlineMinutes" type="number" value="30" min="1" required></div>
+        </div>
+        <div class="row">
+          <div><label>Temp. min (°C)</label><input name="minTemp" type="number" step="0.1" value="2" required></div>
+          <div><label>Temp. max (°C)</label><input name="maxTemp" type="number" step="0.1" value="8" required></div>
+        </div>
+        <h3>Données privées (stockées off-chain, seul leur hash est publié)</h3>
+        <div class="row">
+          <div><label>N° de lot interne</label><input name="numeroLot" value="VAX-2026-0412"></div>
+          <div><label>Prix unitaire (MAD)</label><input name="prix" type="number" value="85"></div>
+        </div>
+        <div class="actions"><button>Enregistrer sur la blockchain</button></div>
+        <div id="create-result"></div>
+      </form>
+      <div class="card">
+        <h2>Mes lots</h2>
+        <div class="table-wrap"><table id="supplier-lots"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Transporteur : Fct2, Fct3 -->
+  <section data-panel="carrier" hidden>
+    <div class="grid">
+      <div class="card">
+        <h2>Scanner un lot et mettre à jour son statut</h2>
+        <label>Lot</label><select class="lot-select" id="carrier-lot" data-filter="open"></select>
+        <label>Nouveau statut</label>
+        <select id="carrier-status">
+          <option value="1">Pris en charge</option><option value="2">En douane</option>
+          <option value="3">En stockage</option><option value="4">En transit</option>
+        </select>
+        <label>Note (lieu, observation)</label><input id="carrier-note" placeholder="Entrepôt de Casablanca">
+        <div class="actions"><button id="btn-status">Enregistrer l'étape</button></div>
+        <div id="status-result"></div>
+      </div>
+      <div class="card">
+        <h2>Envoyer une mesure capteur (IoT)</h2>
+        <p class="muted">Normalement envoyé automatiquement par le capteur : voir <code>npm run iot</code>.</p>
+        <div class="row">
+          <div><label>Température (°C)</label><input id="iot-temp" type="number" step="0.1" value="5"></div>
+          <div><label>Position (lat, lon)</label><input id="iot-pos" value="32.2359, -7.9545"></div>
+        </div>
+        <div class="actions"><button id="btn-iot">Envoyer la mesure</button></div>
+        <div id="iot-result"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gestionnaire : Fct4, Fct7, Fct8 -->
+  <section data-panel="manager" hidden>
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <h2>Tous les lots</h2>
+      <div class="table-wrap"><table id="manager-lots"></table></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Alertes du Smart Contract</h2>
+        <div class="table-wrap"><table id="alerts"></table></div>
+      </div>
+      <div class="card">
+        <h2>Paramétrer les règles d'un lot</h2>
+        <label>Lot</label><select class="lot-select" id="rules-lot" data-filter="open"></select>
+        <div class="row">
+          <div><label>Temp. min (°C)</label><input id="rules-min" type="number" step="0.1" value="2"></div>
+          <div><label>Temp. max (°C)</label><input id="rules-max" type="number" step="0.1" value="8"></div>
+        </div>
+        <label>Nouvelle date limite (dans N minutes)</label><input id="rules-deadline" type="number" value="30">
+        <div class="actions"><button id="btn-rules">Mettre à jour</button></div>
+        <div id="rules-result"></div>
+        <h3>Attribuer un rôle</h3>
+        <label>Adresse</label><input id="role-address" class="mono" placeholder="0x…">
+        <select id="role-id"><option value="1">Fournisseur</option><option value="2">Transporteur</option><option value="3">Gestionnaire</option><option value="4">Destinataire</option><option value="0">Aucun (révoquer)</option></select>
+        <div class="actions"><button id="btn-role">Attribuer</button></div>
+        <div id="role-result"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Destinataire : Fct5, Fct6 -->
+  <section data-panel="recipient" hidden>
+    <div class="card">
+      <h2>Réceptionner une livraison</h2>
+      <label>Lot</label><select class="lot-select" id="recipient-lot" data-filter="open"></select>
+      <p><a id="recipient-trace" target="_blank">Consulter l'historique complet avant de signer →</a></p>
+      <div class="actions"><button id="btn-deliver">Valider la réception conforme</button></div>
+      <label>Ou refuser : motif du litige</label><input id="dispute-reason" placeholder="Colis endommagé, température hors plage…">
+      <div class="actions"><button class="danger" id="btn-dispute">Ouvrir un litige</button></div>
+      <div id="recipient-result"></div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="common.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

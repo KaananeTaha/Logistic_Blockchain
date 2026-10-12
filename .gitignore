@@ -1,0 +1,9 @@
+node_modules/
+artifacts/
+cache/
+deployment.json
+backend/data/
+.env
+.DS_Store
+network/generated/
+network/data/
