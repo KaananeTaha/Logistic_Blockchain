@@ -1,0 +1,28 @@
+{
+  "name": "logistic-blockchain",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Blockchain décentralisée pour la traçabilité d'une chaîne logistique (PRJINFO-18)",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "chain": "hardhat node",
+    "deploy": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:besu": "hardhat run scripts/deploy.js --network besu",
+    "start": "node backend/src/index.js",
+    "iot": "node scripts/iot-simulator.js",
+    "demo": "node scripts/demo-scenario.js"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0",
+    "express": "^4.21.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.0"
+  }
+}
