@@ -1,10 +1,12 @@
 // Simule le capteur embarqué d'un camion frigorifique sur le trajet Casablanca → Benguerir → Marrakech.
-// Usage : npm run iot -- <lotId> [--break] [--steps 10] [--interval 2]
+// Usage : npm run iot -- <lotId> [--break] [--steps 10] [--interval 2] [--account 0x…]
 //   --break : à mi-parcours, la température dépasse le seuil (panne du groupe froid).
 const API = process.env.API_URL || "http://localhost:3000";
 
 const args = process.argv.slice(2);
-const lotId = args.find((a) => a.startsWith("0x"));
+const optStr = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
+const account = optStr("account"); // compte Transporteur qui signe (défaut : compte de démo)
+const lotId = args.find((a) => a.startsWith("0x") && a !== account);
 const opt = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? Number(args[i + 1]) : def; };
 const steps = opt("steps", 10);
 const intervalS = opt("interval", 2);
@@ -39,7 +41,7 @@ async function main() {
     const r = await (await fetch(`${API}/api/iot/${lotId}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ temperature: +temperature.toFixed(1), lat, lon }),
+      body: JSON.stringify({ account, temperature: +temperature.toFixed(1), lat, lon }),
     })).json();
 
     if (r.error) { console.error("  ✖", r.error); process.exit(1); }
