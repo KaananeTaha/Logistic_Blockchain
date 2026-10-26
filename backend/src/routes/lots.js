@@ -1,12 +1,17 @@
 const router = require("express").Router();
 const QRCode = require("qrcode");
 const { ethers } = require("ethers");
-const { contract, send, reason, plain, readLot, STATUS } = require("../chain");
+const { contract, send, step, reason, plain, readLot, describe, defaultAccount, STATUS } = require("../chain");
 const store = require("../store");
-const { walletFor } = require("../../../config/demo-accounts");
 
 const wrap = (fn) => (req, res) =>
-  fn(req, res).catch((e) => res.status(400).json({ error: reason(e) }));
+  fn(req, res).catch((e) => res.status(400).json({ error: reason(e), steps: e.steps }));
+
+// Compte qui signe : celui choisi dans l'interface, sinon le compte de démo du rôle attendu.
+const signer = (req, role) => req.body.account || defaultAccount(role);
+
+const reply = (res, r, extra = {}) =>
+  res.json({ txHash: r.txHash, block: r.block, events: r.events.map((e) => e.name), steps: r.steps, ...extra });
 
 // Liste de tous les lots (dashboard, listes déroulantes).
 router.get("/", wrap(async (req, res) => {
@@ -20,14 +25,21 @@ router.post("/", wrap(async (req, res) => {
   const privateData = b.privateData || {};
   const dataHash = store.hashOf(privateData);
   const now = Math.floor(Date.now() / 1000);
-  const { events, txHash } = await send("supplier", "createLot",
+  const before = [step("Données privées hachées",
+    `${JSON.stringify(privateData)}\nkeccak256(JSON trié) = ${dataHash}\nSeul ce hash part sur la blockchain ; les données restent sur le serveur de l'entreprise.`)];
+
+  const r = await send(signer(req, "supplier"), "createLot", [
     b.nature, Number(b.quantity), now,
     Math.round(b.minTemp * 10), Math.round(b.maxTemp * 10),
     now + Math.round(b.deadlineMinutes * 60),
-    walletFor("recipient").address, dataHash);
-  const lotId = events.find((e) => e.name === "LotCreated").args.lotId;
+    b.recipient || defaultAccount("recipient"), dataHash,
+  ], { before });
+
+  const lotId = r.events.find((e) => e.name === "LotCreated").args.lotId;
   store.savePrivate(lotId, privateData);
-  res.json({ lotId, txHash });
+  r.steps.push(step("Données privées enregistrées hors chaîne",
+    `Fichier ${store.file()}, indexées par l'identifiant du lot.\nLe QR Code imprimé sur le colis contient cet identifiant : ${lotId}`));
+  reply(res, r, { lotId });
 }));
 
 // Fct5 : traçabilité complète d'un lot (ce qu'affiche la page ouverte par le QR Code).
@@ -35,7 +47,7 @@ router.get("/:id", wrap(async (req, res) => {
   const id = req.params.id;
   const lot = await readLot(id);
   const history = plain(await contract.getHistory(id)).map(([status, actor, timestamp, noteHash]) => ({
-    status, statusLabel: STATUS[status], actor, timestamp,
+    status, statusLabel: STATUS[status], actor, actorName: describe(actor)?.name, timestamp,
     note: noteHash === ethers.ZeroHash ? null : store.getNote(noteHash) ?? "(note introuvable off-chain)",
   }));
   const readings = (await contract.queryFilter(contract.filters.SensorReading(id), 0)).map((e) => ({
@@ -53,7 +65,10 @@ router.get("/:id", wrap(async (req, res) => {
   const integrity = privateData === undefined ? "missing"
     : store.hashOf(privateData) === lot.dataHash ? "ok" : "tampered";
 
-  res.json({ lot, history, readings, anomalies, privateData, integrity });
+  res.json({
+    lot: { ...lot, supplierName: describe(lot.supplier)?.name, recipientName: describe(lot.recipient)?.name },
+    history, readings, anomalies, privateData, integrity,
+  });
 }));
 
 // Fct1 : QR Code pointant vers la page publique de traçabilité.
@@ -64,31 +79,34 @@ router.get("/:id/qrcode", wrap(async (req, res) => {
 
 // Fct2 : le transporteur scanne le lot et met à jour son statut.
 router.post("/:id/status", wrap(async (req, res) => {
-  const noteHash = req.body.note ? store.saveNote(req.body.note) : ethers.ZeroHash;
-  res.json(await send("carrier", "updateStatus", req.params.id, Number(req.body.status), noteHash).then(summary));
+  const before = [];
+  let noteHash = ethers.ZeroHash;
+  if (req.body.note) {
+    noteHash = store.saveNote(req.body.note);
+    before.push(step("Note hachée et stockée hors chaîne", `« ${req.body.note} »\nkeccak256 = ${noteHash} (seul ce hash est inscrit)`));
+  }
+  reply(res, await send(signer(req, "carrier"), "updateStatus", [req.params.id, Number(req.body.status), noteHash], { before }));
 }));
 
 // Fct6 : le destinataire signe la réception conforme...
 router.post("/:id/deliver", wrap(async (req, res) => {
-  res.json(await send("recipient", "confirmDelivery", req.params.id).then(summary));
+  reply(res, await send(signer(req, "recipient"), "confirmDelivery", [req.params.id]));
 }));
 
 // ...ou refuse la livraison et ouvre un litige.
 router.post("/:id/dispute", wrap(async (req, res) => {
-  const reasonHash = store.saveNote(req.body.reason || "Litige sans motif");
-  res.json(await send("recipient", "raiseDispute", req.params.id, reasonHash).then(summary));
+  const text = req.body.reason || "Litige sans motif";
+  const reasonHash = store.saveNote(text);
+  const before = [step("Motif haché et stocké hors chaîne", `« ${text} »\nkeccak256 = ${reasonHash}`)];
+  reply(res, await send(signer(req, "recipient"), "raiseDispute", [req.params.id, reasonHash], { before }));
 }));
 
 // Fct8 : le gestionnaire ajuste les règles du Smart Contract pour ce lot.
 router.post("/:id/rules", wrap(async (req, res) => {
   const b = req.body;
   const deadline = Math.floor(Date.now() / 1000) + Math.round(b.deadlineMinutes * 60);
-  res.json(await send("manager", "setRules", req.params.id,
-    Math.round(b.minTemp * 10), Math.round(b.maxTemp * 10), deadline).then(summary));
+  reply(res, await send(signer(req, "manager"), "setRules",
+    [req.params.id, Math.round(b.minTemp * 10), Math.round(b.maxTemp * 10), deadline]));
 }));
-
-function summary({ txHash, block, events }) {
-  return { txHash, block, events: events.map((e) => e.name) };
-}
 
 module.exports = router;

@@ -72,13 +72,13 @@ Voir le [README](../README.md) à la racine (installation, démo pas à pas).
 
 ### Réseau à 4 noeuds (un par laptop)
 
-Pour la démo, la chaîne tourne sur un réseau privé **Hyperledger Besu (QBFT)** : 4 validateurs, un par membre, tolérance à 1 panne. Voir [network/README.md](../network/README.md). Hardhat local reste utilisé pour le développement et les tests.
+Pour la démo, la chaîne tourne sur un réseau privé **Hyperledger Besu (QBFT)** : 4 validateurs, un par membre, tolérance à 1 panne, données persistantes sur disque. Voir [network/README.md](../network/README.md), [consensus.md](consensus.md) et [persistance.md](persistance.md). Hardhat local reste utilisé pour le développement et les tests.
 
 ## 7. Limites connues du prototype
 
-- Le serveur signe à la place des utilisateurs (comptes de démo à clés publiques) : à remplacer par MetaMask.
+- Le serveur conserve les clés privées de tous les comptes et signe à leur place : à remplacer par un wallet par acteur (MetaMask).
 - L'ordre des statuts n'est pas imposé (ex. `Créé → En douane` est accepté).
 - Les données privées sont lisibles par tous via l'API ; il manque l'authentification côté backend.
 - Pas de notification push (mail/websocket) : les alertes s'affichent dans le tableau de bord.
 - Le stockage off-chain est un fichier JSON, suffisant pour une démo mais pas pour plusieurs utilisateurs simultanés.
-- Testé sur Hardhat uniquement ; le déploiement sur le réseau Besu n'a pas encore été essayé.
+- Testé de bout en bout sur Hardhat. Réseau Besu : génération testée, lancement des nœuds à tester ([plan de test](test-4-machines.md)).

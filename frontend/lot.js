@@ -25,7 +25,7 @@ async function load() {
           <div>${statusBadge(lot)} ${flags(lot)}</div>
           <p class="mono">${id}</p>
           <p class="muted">Plage tolérée ${lot.minTemp / 10}–${lot.maxTemp / 10} °C · échéance ${fmtTime(lot.deadline)}<br>
-          Fournisseur <span class="mono">${short(lot.supplier)}</span> → Destinataire <span class="mono">${short(lot.recipient)}</span></p>
+          Fournisseur ${esc(lot.supplierName || "")} <span class="mono">${short(lot.supplier)}</span> → Destinataire ${esc(lot.recipientName || "")} <span class="mono">${short(lot.recipient)}</span></p>
           <span class="badge ${cls}">${msg}</span>
         </div>
       </div>
@@ -36,7 +36,7 @@ async function load() {
         <ol class="timeline">${history.map((h) => `
           <li class="${h.status === 5 ? "ok" : h.status === 6 ? "bad" : ""}">
             <b>${esc(h.statusLabel)}</b> <span class="muted">${fmtTime(h.timestamp)}</span><br>
-            ${h.note ? esc(h.note) + "<br>" : ""}<span class="muted mono">signé par ${short(h.actor)}</span>
+            ${h.note ? esc(h.note) + "<br>" : ""}<span class="muted">signé par ${esc(h.actorName || "")}</span> <span class="muted mono">${short(h.actor)}</span>
           </li>`).join("")}
           ${anomalies.map((a) => `<li class="bad"><span class="badge bad">⚠ ${esc(a.reason)}</span> <span class="muted">${fmtTime(a.timestamp)}</span></li>`).join("")}
         </ol>
