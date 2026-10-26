@@ -7,7 +7,11 @@ Debrief précédent avec M. Nabil Tazi : 6 décisions. État au 26/10/2026.
 | 1 | Choisir un mécanisme de consensus et préparer un argumentaire | QBFT (Hyperledger Besu) retenu. Argumentaire : fonctionnement, avantages, limites, alternatives écartées (PoW, PoS, Clique, IBFT 2.0, Raft), réponses aux questions probables. Consensus et validateurs affichés en direct dans l'application. | [consensus.md](consensus.md), onglet Blockchain | Fait |
 | 2 | Rendre visible ce qui se passe en arrière-plan à chaque étape | Panneau « Ce qui vient de se passer en coulisses » après chaque action : hachage, construction, signature, contrôles du contrat, bloc et lien avec le bloc précédent, événements, stockage hors chaîne. Les refus sont expliqués aussi. Explorateur des derniers blocs. `npm run demo -- --details` en ligne de commande. | Interface, [parcours.md](parcours.md) | Fait |
 <<<<<<< HEAD
+<<<<<<< HEAD
 | 3 | Trouver un stockage permanent des données | Analyse des options. Retenu : nœuds Besu qui écrivent sur disque (la persistance vient de la réplication sur les 4 nœuds). Mode « 4 nœuds sur une machine » pour répéter. Données hors chaîne séparées par blockchain pour ne jamais mélanger deux chaînes. | [persistance.md](persistance.md) | Fait. Répétition sur une machine réussie ; test d'arrêt et de relance à mener |
+=======
+| 3 | Trouver un stockage permanent des données | Analyse des options. Retenu : nœuds Besu qui écrivent sur disque (la persistance vient de la réplication sur les 4 nœuds). Mode « 4 nœuds sur une machine » pour répéter. Données hors chaîne séparées par blockchain pour ne jamais mélanger deux chaînes. | [persistance.md](persistance.md) | Fait et **testé** : après arrêt et relance des 4 nœuds sans redéploiement, les lots sont toujours là (26/10) |
+>>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
 =======
 | 3 | Trouver un stockage permanent des données | Analyse des options. Retenu : nœuds Besu qui écrivent sur disque (la persistance vient de la réplication sur les 4 nœuds). Mode « 4 nœuds sur une machine » pour répéter. Données hors chaîne séparées par blockchain pour ne jamais mélanger deux chaînes. | [persistance.md](persistance.md) | Fait et **testé** : après arrêt et relance des 4 nœuds sans redéploiement, les lots sont toujours là (26/10) |
 >>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
@@ -20,7 +24,11 @@ Debrief précédent avec M. Nabil Tazi : 6 décisions. État au 26/10/2026.
 1. Installer Java 25+ et Besu sur les 3 autres machines (fait sur celle de Taha).
 2. Mener le test sur 4 machines en remplissant le plan de test (la répétition sur une machine est réussie).
 <<<<<<< HEAD
+<<<<<<< HEAD
 3. Mener le test de persistance (tout arrêter, tout relancer sans redéployer).
+=======
+3. Refaire le test de persistance sur les 4 machines (réussi sur une machine).
+>>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
 =======
 3. Refaire le test de persistance sur les 4 machines (réussi sur une machine).
 >>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
