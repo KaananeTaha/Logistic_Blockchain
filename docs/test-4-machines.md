@@ -19,7 +19,7 @@ Conseil : faire d'abord la **répétition sur une seule machine** (`npm run netw
 
 | # | Test | Procédure | Résultat attendu | Résultat |
 |---|---|---|---|---|
-| 0 | Répétition locale | `npm run network:local` puis `npm run network:status` sur une machine | 4 nœuds joignables, 3 pairs chacun, numéros de bloc qui avancent ensemble | |
+| 0 | Répétition locale | `npm run network:local` puis `npm run network:status` sur une machine | 4 nœuds joignables, 3 pairs chacun, numéros de bloc qui avancent ensemble | **Réussi le 26/10** (MacBook Air, macOS 12) : 3 pairs, 4 validateurs, même bloc ; déploiement et scénario complet réussis |
 | 1 | Connexion | Lancer les 4 nœuds (`network:start`), puis `network:status` avec les 4 adresses | Chaque nœud : 3 pairs, 4 validateurs, même numéro de bloc (à 1 près) | |
 | 2 | Production de blocs | Relancer `network:status` après 10 s | Les numéros ont avancé d'environ 5 (1 bloc toutes les 2 s) ; le proposeur change d'un bloc à l'autre | |
 | 3 | Déploiement | `deploy:besu` depuis la machine 1, puis `npm start` | Contrat déployé ; en-tête de l'interface : « QBFT · 4 validateurs · 3 pairs » | |

@@ -4,7 +4,7 @@ Le réseau de démonstration : 4 nœuds Hyperledger Besu, un par membre du group
 
 Toutes les commandes passent par `scripts/network.js` et fonctionnent sous macOS, Linux et Windows.
 
-> **Statut :** la génération du réseau et l'encodage du génésis sont testés (comparés à l'exemple officiel de Besu). Le lancement réel des nœuds Besu **n'a pas encore été testé** : c'est l'objet du prochain test.
+> **Statut (26/10/2026) :** répétition réussie sur une machine (macOS, Besu 26.10.2, Java 25) : 4 validateurs connectés, un bloc toutes les 2 s, proposeur qui tourne, contrat déployé à gaz gratuit, scénario complet réussi. Reste le test sur 4 machines.
 
 ## 1. Installer Besu sur chaque machine
 

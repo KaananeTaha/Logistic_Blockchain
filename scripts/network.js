@@ -80,7 +80,8 @@ function besuArgs({ n, ip, p2pPort, rpcPort, bootnode, paths }) {
     `--p2p-host=${ip}`, `--p2p-port=${p2pPort}`,
     "--rpc-http-enabled", "--rpc-http-host=0.0.0.0", `--rpc-http-port=${rpcPort}`,
     "--rpc-http-api=ETH,NET,WEB3,QBFT", "--rpc-http-cors-origins=all", "--host-allowlist=*",
-    "--min-gas-price=0", "--tx-pool-enable-balance-check=false", "--profile=ENTERPRISE",
+    // Gaz gratuit : prix 0, donc une transaction ne coûte rien même depuis un compte vide.
+    "--min-gas-price=0", "--profile=ENTERPRISE",
   ];
   if (n !== 1) args.push(`--bootnodes=${bootnode}`);
   return args;

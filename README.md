@@ -224,7 +224,7 @@ Variables d'environnement facultatives : `PORT` (défaut 3000), `RPC_URL` (défa
 - L'ordre des statuts n'est pas imposé et les données privées sont lisibles via l'API (pas d'authentification).
 - Pas de notification push : les alertes s'affichent dans l'interface.
 - Le stockage off-chain est un simple fichier JSON, sur la seule machine du backend.
-- Testé de bout en bout avec Hardhat. Le réseau Besu : génération testée, lancement réel des nœuds pas encore testé ([plan de test](docs/test-4-machines.md)).
+- Testé de bout en bout avec Hardhat, et avec les 4 nœuds Besu sur une seule machine. Le test sur 4 machines reste à mener ([plan de test](docs/test-4-machines.md)).
 
 ## Réseau à 4 noeuds
 
