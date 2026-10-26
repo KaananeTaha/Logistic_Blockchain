@@ -31,7 +31,7 @@ Point clé : **dans une vraie blockchain, la persistance vient de la réplicatio
 - `npm run network:reset -- --yes` efface volontairement les données (nouvelle chaîne vierge).
 - Le stockage hors chaîne utilise un fichier par blockchain (`backend/data/<chainId>-<contrat>.json`). Changer de réseau ou redéployer ne mélange plus les données.
 
-## 4. Test de persistance à réaliser
+## 4. Test de persistance (réussi le 26/10/2026 sur une machine, avec les 4 nœuds)
 
 1. `npm run network:local`, puis `npm run deploy:besu`, puis `npm start`.
 2. Créer un compte et un lot, enregistrer quelques étapes.

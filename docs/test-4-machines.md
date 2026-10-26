@@ -28,7 +28,7 @@ Conseil : faire d'abord la **répétition sur une seule machine** (`npm run netw
 | 6 | Retour du nœud | Relancer le nœud 4 | Il rattrape les blocs manquants et retrouve le même numéro que les autres | |
 | 7 | Perte du quorum | Arrêter les nœuds 3 et 4, tenter une action | Plus aucun bloc n'est produit, l'action reste en attente ; aucune donnée incohérente | |
 | 8 | Reprise | Relancer les nœuds 3 et 4 | La production reprend. Si c'est long, redémarrer les 4 nœuds (recommandation de la doc Besu) | |
-| 9 | Persistance | Arrêter les 4 nœuds et le backend, puis tout relancer **sans redéployer** | Lots, historique, comptes et intégrité « ok » toujours présents | |
+| 9 | Persistance | Arrêter les 4 nœuds et le backend, puis tout relancer **sans redéployer** | Lots, historique, comptes et intégrité « ok » toujours présents | **Réussi le 26/10 sur une machine** : lots toujours présents après arrêt et relance. À refaire sur 4 machines |
 | 10 | Intégrité | Modifier un prix dans `backend/data/*.json` | La page du lot affiche « Données off-chain MODIFIÉES » | |
 
 ## Problèmes fréquents
