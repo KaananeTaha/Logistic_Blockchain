@@ -1,19 +1,21 @@
 const router = require("express").Router();
-const { contract, send, reason, provider, address } = require("../chain");
-const { ROLES, walletFor } = require("../../../config/demo-accounts");
+const { contract, send, reason, networkInfo, explore, defaultAccount } = require("../chain");
 
-// Comptes de démo et infos réseau, affichés par l'interface.
-router.get("/config", async (req, res) => {
+// Réseau, consensus et validateurs (affichés dans l'en-tête et l'onglet Blockchain).
+router.get("/network", async (req, res) => {
   try {
-    const net = await provider.getNetwork();
-    res.json({
-      contract: address,
-      chainId: Number(net.chainId),
-      block: await provider.getBlockNumber(),
-      accounts: Object.fromEntries(Object.entries(ROLES).map(([k, r]) => [k, { label: r.label, address: walletFor(k).address }])),
-    });
+    res.json(await networkInfo());
   } catch (e) {
     res.status(503).json({ error: `Blockchain injoignable : ${reason(e)}` });
+  }
+});
+
+// Explorateur : derniers blocs et transactions décodées, avec la clé publique de chaque signataire.
+router.get("/explorer", async (req, res) => {
+  try {
+    res.json(await explore(Math.min(Number(req.query.count) || 10, 50)));
+  } catch (e) {
+    res.status(503).json({ error: reason(e) });
   }
 });
 
@@ -25,13 +27,13 @@ router.get("/alerts", async (req, res) => {
   })).reverse());
 });
 
-// Fct8 : le gestionnaire attribue un rôle à une adresse.
+// Fct8 : le gestionnaire attribue un rôle à une adresse existante.
 router.post("/roles", async (req, res) => {
   try {
-    const r = await send("manager", "grantRole", req.body.address, Number(req.body.role));
-    res.json({ txHash: r.txHash });
+    const r = await send(req.body.account || defaultAccount("manager"), "grantRole", [req.body.address, Number(req.body.role)]);
+    res.json({ txHash: r.txHash, block: r.block, steps: r.steps });
   } catch (e) {
-    res.status(400).json({ error: reason(e) });
+    res.status(400).json({ error: reason(e), steps: e.steps });
   }
 });
 

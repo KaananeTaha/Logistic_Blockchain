@@ -1,7 +1,7 @@
 // « Keeper » : un contrat ne s'exécute jamais tout seul. Si un lot dépasse sa date limite sans
 // qu'aucune transaction ne le touche, personne ne déclenche l'alerte. Ce petit service vérifie
 // périodiquement les lots en retard et appelle checkDeadline() pour que la règle s'applique.
-const { contract, send, readLot } = require("./chain");
+const { contract, send, readLot, defaultAccount } = require("./chain");
 
 const DELIVERED = 5, DISPUTED = 6;
 
@@ -10,7 +10,7 @@ async function sweep() {
   for (const id of await contract.getLotIds()) {
     const lot = await readLot(id);
     if (!lot.late && lot.status !== DELIVERED && lot.status !== DISPUTED && now > lot.deadline) {
-      await send("manager", "checkDeadline", id);
+      await send(defaultAccount("manager"), "checkDeadline", [id]);
       console.log(`[keeper] délai dépassé constaté on-chain pour ${id.slice(0, 10)}…`);
     }
   }

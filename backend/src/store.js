@@ -1,19 +1,26 @@
-// Stockage OFF-CHAIN : données privées des lots et textes libres (notes, motifs de litige).
-// La blockchain n'en garde que le hash ; ce fichier peut donc être modifié, mais toute
-// modification devient détectable (voir integrity() dans routes/lots.js).
+// Stockage OFF-CHAIN : comptes créés, données privées des lots et textes libres (notes, motifs).
+// La blockchain n'en garde que le hash ; toute modification de ce fichier devient détectable.
+//
+// Un fichier par blockchain (chainId + adresse du contrat) : si la chaîne est réinitialisée ou
+// si l'on change de réseau, on repart d'un fichier vierge au lieu de mélanger les données.
 const fs = require("fs");
 const path = require("path");
 const { ethers } = require("ethers");
 
-const FILE = path.join(__dirname, "..", "data", "offchain.json");
+const DIR = path.join(__dirname, "..", "data");
+let FILE;
+
+function init(chainId, contractAddress) {
+  FILE = path.join(DIR, `${chainId}-${contractAddress.toLowerCase()}.json`);
+}
 
 function load() {
-  try { return JSON.parse(fs.readFileSync(FILE, "utf8")); }
-  catch { return { lots: {}, notes: {} }; }
+  try { return { accounts: [], lots: {}, notes: {}, ...JSON.parse(fs.readFileSync(FILE, "utf8")) }; }
+  catch { return { accounts: [], lots: {}, notes: {} }; }
 }
 
 function save(db) {
-  fs.mkdirSync(path.dirname(FILE), { recursive: true });
+  fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(db, null, 2));
 }
 
@@ -29,7 +36,8 @@ function canonical(v) {
 const hashOf = (v) => ethers.id(canonical(v));
 
 module.exports = {
-  FILE,
+  init,
+  file: () => path.relative(path.join(__dirname, "..", ".."), FILE),
   hashOf,
   savePrivate(lotId, data) {
     const db = load();
@@ -46,4 +54,12 @@ module.exports = {
     return h;
   },
   getNote: (h) => load().notes[h],
+  // Prototype : la clé privée des comptes créés est conservée ici pour que le serveur puisse signer.
+  // En production, elle ne quitterait jamais le wallet de son propriétaire.
+  listAccounts: () => load().accounts,
+  addAccount(account) {
+    const db = load();
+    db.accounts.push(account);
+    save(db);
+  },
 };

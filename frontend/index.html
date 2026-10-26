@@ -15,8 +15,33 @@
 
   <nav class="tabs" id="tabs"></nav>
 
+  <!-- Étape 1 du parcours : création de compte -->
+  <section data-panel="accounts" hidden>
+    <div class="grid">
+      <form class="card" id="account-form">
+        <h2>Créer un compte</h2>
+        <p class="muted">Sur une blockchain, un compte est une paire de clés : la clé privée signe, la clé publique permet à tous de vérifier la signature, et l'adresse est dérivée de la clé publique. Le compte n'a aucun droit tant que le Gestionnaire ne lui a pas attribué un rôle.</p>
+        <label>Nom de l'acteur</label>
+        <input name="name" value="Pharma Casablanca" required>
+        <label>Rôle demandé</label>
+        <select name="role">
+          <option value="supplier">Fournisseur / Producteur</option>
+          <option value="carrier">Transporteur / Logisticien</option>
+          <option value="recipient">Destinataire / Client final</option>
+        </select>
+        <div class="actions"><button>Générer les clés et demander le rôle</button></div>
+        <div id="account-result"></div>
+      </form>
+      <div class="card">
+        <h2>Comptes</h2>
+        <div class="table-wrap"><table id="accounts-table"></table></div>
+      </div>
+    </div>
+  </section>
+
   <!-- Fournisseur : Fct1 -->
-  <section data-panel="supplier" hidden>
+  <section data-panel="supplier" data-role="supplier" hidden>
+    <div class="account-bar"></div>
     <div class="grid">
       <form class="card" id="create-form">
         <h2>Créer un lot</h2>
@@ -30,7 +55,9 @@
           <div><label>Temp. min (°C)</label><input name="minTemp" type="number" step="0.1" value="2" required></div>
           <div><label>Temp. max (°C)</label><input name="maxTemp" type="number" step="0.1" value="8" required></div>
         </div>
-        <h3>Données privées (stockées off-chain, seul leur hash est publié)</h3>
+        <label>Destinataire</label>
+        <select name="recipient" id="recipient-choice"></select>
+        <h3>Données privées (stockées hors chaîne, seul leur hash est publié)</h3>
         <div class="row">
           <div><label>N° de lot interne</label><input name="numeroLot" value="VAX-2026-0412"></div>
           <div><label>Prix unitaire (MAD)</label><input name="prix" type="number" value="85"></div>
@@ -39,14 +66,15 @@
         <div id="create-result"></div>
       </form>
       <div class="card">
-        <h2>Mes lots</h2>
+        <h2>Lots</h2>
         <div class="table-wrap"><table id="supplier-lots"></table></div>
       </div>
     </div>
   </section>
 
   <!-- Transporteur : Fct2, Fct3 -->
-  <section data-panel="carrier" hidden>
+  <section data-panel="carrier" data-role="carrier" hidden>
+    <div class="account-bar"></div>
     <div class="grid">
       <div class="card">
         <h2>Scanner un lot et mettre à jour son statut</h2>
@@ -58,23 +86,22 @@
         </select>
         <label>Note (lieu, observation)</label><input id="carrier-note" placeholder="Entrepôt de Casablanca">
         <div class="actions"><button id="btn-status">Enregistrer l'étape</button></div>
-        <div id="status-result"></div>
       </div>
       <div class="card">
         <h2>Envoyer une mesure capteur (IoT)</h2>
-        <p class="muted">Normalement envoyé automatiquement par le capteur : voir <code>npm run iot</code>.</p>
+        <p class="muted">Normalement envoyée automatiquement par le capteur : voir <code>npm run iot</code>.</p>
         <div class="row">
           <div><label>Température (°C)</label><input id="iot-temp" type="number" step="0.1" value="5"></div>
           <div><label>Position (lat, lon)</label><input id="iot-pos" value="32.2359, -7.9545"></div>
         </div>
         <div class="actions"><button id="btn-iot">Envoyer la mesure</button></div>
-        <div id="iot-result"></div>
       </div>
     </div>
   </section>
 
   <!-- Gestionnaire : Fct4, Fct7, Fct8 -->
-  <section data-panel="manager" hidden>
+  <section data-panel="manager" data-role="manager" hidden>
+    <div class="account-bar"></div>
     <div class="kpis" id="kpis"></div>
     <div class="card">
       <h2>Tous les lots</h2>
@@ -94,18 +121,17 @@
         </div>
         <label>Nouvelle date limite (dans N minutes)</label><input id="rules-deadline" type="number" value="30">
         <div class="actions"><button id="btn-rules">Mettre à jour</button></div>
-        <div id="rules-result"></div>
-        <h3>Attribuer un rôle</h3>
+        <h3>Attribuer un rôle à une adresse</h3>
         <label>Adresse</label><input id="role-address" class="mono" placeholder="0x…">
         <select id="role-id"><option value="1">Fournisseur</option><option value="2">Transporteur</option><option value="3">Gestionnaire</option><option value="4">Destinataire</option><option value="0">Aucun (révoquer)</option></select>
         <div class="actions"><button id="btn-role">Attribuer</button></div>
-        <div id="role-result"></div>
       </div>
     </div>
   </section>
 
   <!-- Destinataire : Fct5, Fct6 -->
-  <section data-panel="recipient" hidden>
+  <section data-panel="recipient" data-role="recipient" hidden>
+    <div class="account-bar"></div>
     <div class="card">
       <h2>Réceptionner une livraison</h2>
       <label>Lot</label><select class="lot-select" id="recipient-lot" data-filter="open"></select>
@@ -113,8 +139,24 @@
       <div class="actions"><button id="btn-deliver">Valider la réception conforme</button></div>
       <label>Ou refuser : motif du litige</label><input id="dispute-reason" placeholder="Colis endommagé, température hors plage…">
       <div class="actions"><button class="danger" id="btn-dispute">Ouvrir un litige</button></div>
-      <div id="recipient-result"></div>
     </div>
+  </section>
+
+  <!-- Réseau, consensus et explorateur de blocs -->
+  <section data-panel="chain" hidden>
+    <div class="card" id="network-card"></div>
+    <div class="card">
+      <h2>Derniers blocs</h2>
+      <p class="muted">Chaque bloc contient le hash du bloc précédent : modifier un ancien bloc changerait son hash et casserait le lien avec tous les blocs suivants. La clé publique de chaque signataire est retrouvée à partir de la signature de sa transaction.</p>
+      <div id="blocks"></div>
+    </div>
+  </section>
+
+  <!-- Coulisses : détail de la dernière action -->
+  <section class="card" id="coulisses" hidden>
+    <h2>Ce qui vient de se passer en coulisses</h2>
+    <div id="coulisses-result"></div>
+    <ol class="steps" id="coulisses-steps"></ol>
   </section>
 </main>
 <div id="toast"></div>

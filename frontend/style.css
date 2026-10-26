@@ -75,3 +75,22 @@ th { color: var(--muted); font-weight: 600; }
 
 #toast { position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 480px; margin: 0 auto; padding: 10px 14px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: .88rem; opacity: 0; transition: opacity .2s; pointer-events: none; }
 #toast.show { opacity: .95; }
+
+/* Compte actif, clés, coulisses, explorateur */
+.account { margin-bottom: 16px; }
+.account select { max-width: 420px; }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin-top: 8px; font-size: .88rem; }
+.keys > * { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .keys { grid-template-columns: 1fr; } }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem; color: var(--muted); }
+#coulisses { border-color: var(--accent); }
+.steps { margin: 12px 0 0; padding-left: 22px; }
+.steps li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.steps li:last-child { border-bottom: 0; }
+.steps li.ok b { color: var(--ok); }
+.steps li.bad b { color: var(--bad); }
+.block { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg); }
+.block-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tx { margin-top: 10px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 4px; font-size: .86rem; overflow-wrap: anywhere; }
+.link { text-align: center; color: var(--muted); font-size: .8rem; padding: 6px 0; }
+ul.mono { margin: 0; padding-left: 18px; }
