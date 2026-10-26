@@ -83,7 +83,21 @@ function besuArgs({ n, ip, p2pPort, rpcPort, bootnode, paths }) {
     // Gaz gratuit : prix 0, donc une transaction ne coûte rien même depuis un compte vide.
     "--min-gas-price=0", "--profile=ENTERPRISE",
   ];
+<<<<<<< HEAD
   if (n !== 1) args.push(`--bootnodes=${bootnode}`);
+=======
+  if (n !== 1 && WIN) {
+    // Sous Windows, Besu essaie de lire la valeur comme un chemin de fichier et échoue sur le « : » de
+    // « enode:// » (« Illegal char <:> at index 5 »). On lui donne donc un fichier, format documenté :
+    // une adresse enode par ligne.
+    const file = path.join(paths.data, "bootnodes.txt");
+    fs.mkdirSync(paths.data, { recursive: true });
+    fs.writeFileSync(file, `${bootnode}\n`);
+    args.push(`--bootnodes=${file}`);
+  } else if (n !== 1) {
+    args.push(`--bootnodes=${bootnode}`);
+  }
+>>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
   return args;
 }
 
@@ -91,9 +105,19 @@ function enode(nodes, ip, port = P2P_PORT) {
   return `enode://${nodes[0].enodeId}@${ip}:${port}`;
 }
 
+<<<<<<< HEAD
 function besuBinary() {
   const bin = process.env.BESU_BIN || (process.platform === "win32" ? "besu.bat" : "besu");
   const ok = spawnSync(bin, ["--version"], { shell: process.platform === "win32" }).status === 0;
+=======
+// Sous Windows, besu.bat passe par le shell : les chemins contenant des espaces doivent être entre guillemets.
+const WIN = process.platform === "win32";
+const q = (a) => (WIN && /\s/.test(a) ? `"${a}"` : a);
+
+function besuBinary() {
+  const bin = process.env.BESU_BIN || (process.platform === "win32" ? "besu.bat" : "besu");
+  const ok = spawnSync(q(bin), ["--version"], { shell: WIN }).status === 0;
+>>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
   if (!ok) {
     fail("Besu introuvable. Installez Java 25+ et Besu (voir network/README.md), ou indiquez son chemin : BESU_BIN=/chemin/vers/bin/besu\n" +
       "Sur macOS/Linux, vous pouvez aussi utiliser Docker : ajoutez --docker (mode « start » uniquement).");
@@ -102,7 +126,11 @@ function besuBinary() {
 }
 
 function run(label, cmd, args, logFile) {
+<<<<<<< HEAD
   const child = spawn(cmd, args, { shell: process.platform === "win32" });
+=======
+  const child = spawn(q(cmd), args.map(q), { shell: WIN });
+>>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
   const log = logFile && fs.createWriteStream(logFile, { flags: "a" });
   const onData = (buf) => {
     log?.write(buf);
@@ -199,7 +227,17 @@ async function status(urls) {
 function reset(yes) {
   if (!yes) fail("Ceci efface toute la blockchain de cette machine. Confirmez avec : node scripts/network.js reset --yes");
   fs.rmSync(DATA, { recursive: true, force: true });
+<<<<<<< HEAD
   console.log("network/data supprimé. Pensez à redéployer le contrat (npm run deploy:besu).");
+=======
+  // Le contrat redéployé aura la même adresse (même déployeur, même nonce) : on efface aussi les
+  // données hors chaîne de cette chaîne, sinon le backend reprendrait les comptes et lots de l'ancienne.
+  const offchain = path.join(__dirname, "..", "backend", "data");
+  for (const f of fs.existsSync(offchain) ? fs.readdirSync(offchain) : []) {
+    if (f.startsWith(`${CHAIN_ID}-`)) fs.rmSync(path.join(offchain, f));
+  }
+  console.log("network/data et les données hors chaîne de la chaîne 1337 supprimés. Relancez les nœuds, puis npm run deploy:besu.");
+>>>>>>> a3e535c88d0d3d68960d3dcc1a61d60f9396914c
 }
 
 function fail(msg) {
