@@ -81,4 +81,4 @@ Pour la démo, la chaîne tourne sur un réseau privé **Hyperledger Besu (QBFT)
 - Les données privées sont lisibles par tous via l'API ; il manque l'authentification côté backend.
 - Pas de notification push (mail/websocket) : les alertes s'affichent dans le tableau de bord.
 - Le stockage off-chain est un fichier JSON, suffisant pour une démo mais pas pour plusieurs utilisateurs simultanés.
-- Testé de bout en bout sur Hardhat. Réseau Besu : génération testée, lancement des nœuds à tester ([plan de test](test-4-machines.md)).
+- Testé de bout en bout sur Hardhat et sur 4 nœuds Besu (une machine). Test sur 4 machines à mener ([plan de test](test-4-machines.md)).
