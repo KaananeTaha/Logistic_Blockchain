@@ -10,7 +10,7 @@ describe("LogisticsTraceability", () => {
 
   beforeEach(async () => {
     [manager, supplier, carrier, recipient, other] = await ethers.getSigners();
-    c = await (await ethers.getContractFactory("LogisticsTraceability")).deploy();
+    c = await (await ethers.getContractFactory("LogisticsTraceability")).deploy("MOA");
     await c.grantRole(supplier.address, Role.Supplier);
     await c.grantRole(carrier.address, Role.Carrier);
     await c.grantRole(recipient.address, Role.Recipient);
@@ -32,6 +32,27 @@ describe("LogisticsTraceability", () => {
     it("seul le gestionnaire attribue des rôles", async () => {
       await expect(c.connect(supplier).grantRole(other.address, Role.Manager))
         .to.be.revertedWith("Role non autorise");
+    });
+
+    it("une demande d'accès ne donne aucun droit tant que le gestionnaire ne l'a pas validée", async () => {
+      await expect(c.connect(other).requestAccess(Role.Carrier, "Trans-Atlas")).to.emit(c, "AccessRequested");
+      await expect(c.connect(other).updateStatus(lotId, Status.PickedUp, ethers.ZeroHash)).to.be.revertedWith("Role non autorise");
+      let m = (await c.getMembers()).find((x) => x.account === other.address);
+      expect([m.name, Number(m.role), Number(m.requested)]).to.deep.equal(["Trans-Atlas", 0, Role.Carrier]);
+
+      await c.grantRole(other.address, Role.Carrier);
+      await c.connect(other).updateStatus(lotId, Status.PickedUp, ethers.ZeroHash);
+      m = (await c.getMembers()).find((x) => x.account === other.address);
+      expect([Number(m.role), Number(m.requested)]).to.deep.equal([Role.Carrier, 0]);
+    });
+
+    it("l'annuaire contient le gestionnaire (nommé au déploiement) et chaque compte une seule fois", async () => {
+      await c.connect(other).requestAccess(Role.Supplier, "A");
+      await c.connect(other).requestAccess(Role.Carrier, "B");
+      const list = await c.getMembers();
+      expect(list.map((x) => x.account)).to.deep.equal([manager.address, supplier.address, carrier.address, recipient.address, other.address]);
+      expect(list[0].name).to.equal("MOA");
+      expect(list[4].name).to.equal("B");
     });
 
     it("refuse un destinataire qui n'a pas le rôle Destinataire", async () => {

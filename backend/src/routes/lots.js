@@ -1,38 +1,42 @@
 const router = require("express").Router();
 const QRCode = require("qrcode");
 const { ethers } = require("ethers");
-const { contract, send, step, reason, plain, readLot, describe, defaultAccount, STATUS } = require("../chain");
+const chain = require("../chain");
+const { send, step, reason, plain, readLot, describe, STATUS } = chain;
 const store = require("../store");
+const { requireUser } = require("../auth");
+const peers = require("../peers");
 
 const wrap = (fn) => (req, res) =>
   fn(req, res).catch((e) => res.status(400).json({ error: reason(e), steps: e.steps }));
 
-// Compte qui signe : celui choisi dans l'interface, sinon le compte de démo du rôle attendu.
-const signer = (req, role) => req.body.account || defaultAccount(role);
+// Compte qui signe : toujours celui de l'utilisateur connecté. S'il n'a pas le bon rôle, c'est le
+// contrat qui refuse (et non l'interface).
+const signer = (req) => req.user.wallet;
 
 const reply = (res, r, extra = {}) =>
   res.json({ txHash: r.txHash, block: r.block, events: r.events.map((e) => e.name), steps: r.steps, ...extra });
 
 // Liste de tous les lots (dashboard, listes déroulantes).
 router.get("/", wrap(async (req, res) => {
-  const ids = await contract.getLotIds();
+  const ids = await chain.contract.getLotIds();
   res.json(await Promise.all(ids.map(readLot)));
 }));
 
 // Fct1 : le fournisseur crée un lot. Les données privées restent off-chain, seul leur hash est publié.
-router.post("/", wrap(async (req, res) => {
+router.post("/", requireUser, wrap(async (req, res) => {
   const b = req.body;
   const privateData = b.privateData || {};
   const dataHash = store.hashOf(privateData);
   const now = Math.floor(Date.now() / 1000);
   const before = [step("Données privées hachées",
-    `${JSON.stringify(privateData)}\nkeccak256(JSON trié) = ${dataHash}\nSeul ce hash part sur la blockchain ; les données restent sur le serveur de l'entreprise.`)];
+    `${JSON.stringify(privateData)}\nkeccak256(JSON trié) = ${dataHash}\nSeul ce hash part sur la blockchain ; les données restent sur cette machine.`)];
 
-  const r = await send(signer(req, "supplier"), "createLot", [
+  const r = await send(signer(req), "createLot", [
     b.nature, Number(b.quantity), now,
     Math.round(b.minTemp * 10), Math.round(b.maxTemp * 10),
     now + Math.round(b.deadlineMinutes * 60),
-    b.recipient || defaultAccount("recipient"), dataHash,
+    b.recipient, dataHash,
   ], { before });
 
   const lotId = r.events.find((e) => e.name === "LotCreated").args.lotId;
@@ -46,17 +50,17 @@ router.post("/", wrap(async (req, res) => {
 router.get("/:id", wrap(async (req, res) => {
   const id = req.params.id;
   const lot = await readLot(id);
-  const history = plain(await contract.getHistory(id)).map(([status, actor, timestamp, noteHash]) => ({
-    status, statusLabel: STATUS[status], actor, actorName: describe(actor)?.name, timestamp,
-    note: noteHash === ethers.ZeroHash ? null : store.getNote(noteHash) ?? "(note introuvable off-chain)",
-  }));
-  const readings = (await contract.queryFilter(contract.filters.SensorReading(id), 0)).map((e) => ({
+  const history = await Promise.all(plain(await chain.contract.getHistory(id)).map(async ([status, actor, timestamp, noteHash]) => ({
+    status, statusLabel: STATUS[status], actor, actorName: (await describe(actor))?.name, timestamp,
+    note: noteHash === ethers.ZeroHash ? null : await checkedNote(noteHash),
+  })));
+  const readings = (await chain.contract.queryFilter(chain.contract.filters.SensorReading(id), 0)).map((e) => ({
     temperature: Number(e.args.temperature) / 10,
     lat: Number(e.args.lat) / 1e6,
     lon: Number(e.args.lon) / 1e6,
     timestamp: Number(e.args.timestamp),
   }));
-  const anomalies = (await contract.queryFilter(contract.filters.AnomalyRaised(id), 0)).map((e) => ({
+  const anomalies = (await chain.contract.queryFilter(chain.contract.filters.AnomalyRaised(id), 0)).map((e) => ({
     reason: e.args.reason, timestamp: Number(e.args.timestamp),
   }));
 
@@ -66,7 +70,7 @@ router.get("/:id", wrap(async (req, res) => {
     : store.hashOf(privateData) === lot.dataHash ? "ok" : "tampered";
 
   res.json({
-    lot: { ...lot, supplierName: describe(lot.supplier)?.name, recipientName: describe(lot.recipient)?.name },
+    lot: { ...lot, supplierName: (await describe(lot.supplier))?.name, recipientName: (await describe(lot.recipient))?.name },
     history, readings, anomalies, privateData, integrity,
   });
 }));
@@ -78,35 +82,45 @@ router.get("/:id/qrcode", wrap(async (req, res) => {
 }));
 
 // Fct2 : le transporteur scanne le lot et met à jour son statut.
-router.post("/:id/status", wrap(async (req, res) => {
+router.post("/:id/status", requireUser, wrap(async (req, res) => {
   const before = [];
   let noteHash = ethers.ZeroHash;
   if (req.body.note) {
     noteHash = store.saveNote(req.body.note);
     before.push(step("Note hachée et stockée hors chaîne", `« ${req.body.note} »\nkeccak256 = ${noteHash} (seul ce hash est inscrit)`));
   }
-  reply(res, await send(signer(req, "carrier"), "updateStatus", [req.params.id, Number(req.body.status), noteHash], { before }));
+  reply(res, await send(signer(req), "updateStatus", [req.params.id, Number(req.body.status), noteHash], { before }));
 }));
 
 // Fct6 : le destinataire signe la réception conforme...
-router.post("/:id/deliver", wrap(async (req, res) => {
-  reply(res, await send(signer(req, "recipient"), "confirmDelivery", [req.params.id]));
+router.post("/:id/deliver", requireUser, wrap(async (req, res) => {
+  reply(res, await send(signer(req), "confirmDelivery", [req.params.id]));
 }));
 
 // ...ou refuse la livraison et ouvre un litige.
-router.post("/:id/dispute", wrap(async (req, res) => {
+router.post("/:id/dispute", requireUser, wrap(async (req, res) => {
   const text = req.body.reason || "Litige sans motif";
   const reasonHash = store.saveNote(text);
   const before = [step("Motif haché et stocké hors chaîne", `« ${text} »\nkeccak256 = ${reasonHash}`)];
-  reply(res, await send(signer(req, "recipient"), "raiseDispute", [req.params.id, reasonHash], { before }));
+  reply(res, await send(signer(req), "raiseDispute", [req.params.id, reasonHash], { before }));
 }));
 
 // Fct8 : le gestionnaire ajuste les règles du Smart Contract pour ce lot.
-router.post("/:id/rules", wrap(async (req, res) => {
+router.post("/:id/rules", requireUser, wrap(async (req, res) => {
   const b = req.body;
   const deadline = Math.floor(Date.now() / 1000) + Math.round(b.deadlineMinutes * 60);
-  reply(res, await send(signer(req, "manager"), "setRules",
+  reply(res, await send(signer(req), "setRules",
     [req.params.id, Math.round(b.minTemp * 10), Math.round(b.maxTemp * 10), deadline]));
 }));
+
+// Une note est stockée hors chaîne, sur la machine de son auteur ; la blockchain garde son hash.
+// Si elle n'est pas ici, on la demande aux autres nœuds et on ne l'accepte que si son hash correspond.
+// Si le texte local a été modifié, son hash ne correspond plus : on le signale.
+async function checkedNote(noteHash) {
+  const text = store.getNote(noteHash) ?? await peers.fetchNote(noteHash, (t) => ethers.id(t) === noteHash && store.saveNote(t));
+  if (text === undefined) return "(note introuvable : la machine de son auteur est hors ligne)";
+  if (ethers.id(text) !== noteHash) return `⚠ NOTE MODIFIÉE HORS CHAÎNE (son hash ne correspond plus à la blockchain) : « ${text} »`;
+  return text;
+}
 
 module.exports = router;

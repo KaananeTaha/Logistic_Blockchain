@@ -1,9 +1,12 @@
 node_modules/
 artifacts/
 cache/
-deployment.json
-backend/data/
 .env
 .DS_Store
+# Tout ce que l application ecrit sur cette machine : noeud, cles, comptes chiffres, blockchain
+app-data/
+# Restes de l ancien outillage (cles privees des anciens validateurs) : a supprimer, ne jamais commiter
 network/generated/
 network/data/
+backend/data/
+deployment.json

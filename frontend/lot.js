@@ -4,7 +4,7 @@ const id = new URLSearchParams(location.search).get("id");
 const INTEGRITY = {
   ok: ['ok', "Données off-chain intactes : leur hash correspond à celui inscrit sur la blockchain."],
   tampered: ['bad', "Données off-chain MODIFIÉES : leur hash ne correspond plus à celui de la blockchain."],
-  missing: ['warn', "Données off-chain introuvables sur ce serveur."],
+  missing: ['warn', "Données privées absentes de cette machine : elles restent chez le Fournisseur, seul leur hash est répliqué."],
 };
 
 async function load() {
@@ -43,8 +43,8 @@ async function load() {
       </div>
       <div class="card">
         <h2>Données privées (off-chain)</h2>
-        <p class="muted">Dans ce prototype elles sont visibles par tous ; en production, seuls les acteurs autorisés y auraient accès.</p>
-        <pre class="mono">${esc(JSON.stringify(privateData, null, 2))}</pre>
+        <p class="muted">Elles ne quittent pas la machine où le lot a été créé. Quiconque y accède peut les lire : en production, seuls les acteurs autorisés y auraient accès.</p>
+        <pre class="mono">${privateData === undefined ? "Non disponibles sur cette machine." : esc(JSON.stringify(privateData, null, 2))}</pre>
       </div>
     </div>
     <div class="card chart">

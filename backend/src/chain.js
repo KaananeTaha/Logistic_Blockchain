@@ -1,81 +1,94 @@
-// Pont entre l'API et la blockchain : lecture du contrat, signature des transactions avec le
-// compte choisi, et explication pas à pas de ce qui se passe (« coulisses »).
-const fs = require("fs");
-const path = require("path");
+// Pont entre l'API et la blockchain : lecture du contrat, signature des transactions avec le compte
+// connecté, et explication pas à pas de ce qui se passe (« coulisses »).
 const { ethers } = require("ethers");
-const { ROLES, walletFor } = require("../../config/demo-accounts");
+const { abi, bytecode } = require("../contract.json");
+const besu = require("./besu");
+const config = require("./config");
 const store = require("./store");
 
-const DEPLOYMENT = path.join(__dirname, "..", "..", "deployment.json");
-if (!fs.existsSync(DEPLOYMENT)) {
-  console.error("deployment.json introuvable : lancez d'abord `npm run deploy` (ou `npm run deploy:besu`).");
-  process.exit(1);
-}
-const { address, abi } = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
-
-// cacheTimeout -1 : sinon ethers met le nonce en cache 250 ms et deux transactions rapprochées
-// du même compte réutilisent le même nonce.
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
-const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, { cacheTimeout: -1 });
-const contract = new ethers.Contract(address, abi, provider);
-
 const STATUS = ["Créé", "Pris en charge", "En douane", "En stockage", "En transit", "Livré", "Litige"];
-const ROLE_IDS = Object.fromEntries(Object.entries(ROLES).map(([k, r]) => [k, r.roleId]));
-const ROLE_LABELS = Object.fromEntries(Object.entries(ROLES).map(([k, r]) => [k, r.label]));
+const ROLE_KEYS = [null, "supplier", "carrier", "manager", "recipient"]; // index = enum Role du contrat
+const ROLE_IDS = { supplier: 1, carrier: 2, manager: 3, recipient: 4 };
+const ROLE_LABELS = {
+  manager: "Gestionnaire (MOA)", supplier: "Fournisseur / Producteur",
+  carrier: "Transporteur / Logisticien", recipient: "Destinataire / Client final",
+};
+const GAS = { gasPrice: 0 }; // réseau privé à gaz gratuit
 
-// Renseigné par init() au démarrage.
-const net = { chainId: null, freeGas: false };
+// Renseignés par connect(), une fois le nœud local démarré.
+const chain = { provider: null, contract: null, address: null, ready: false };
 
-async function init() {
-  net.chainId = Number((await provider.getNetwork()).chainId);
-  net.freeGas = net.chainId === 1337; // réseau Besu du projet (genesis à gaz gratuit)
-  store.init(net.chainId, address);
+function connect() {
+  // cacheTimeout -1 : sinon ethers met le nonce en cache 250 ms et deux transactions rapprochées
+  // du même compte réutilisent le même nonce.
+  chain.provider = new ethers.JsonRpcProvider(besu.rpcUrl(), besu.CHAIN_ID, { cacheTimeout: -1, staticNetwork: true, pollingInterval: 500 });
+  chain.ready = false;
+  chain.address = chain.contract = null;
 }
 
-// ───────────── Comptes ─────────────
-// Comptes de démo (dérivés de la mnémonique) + comptes créés depuis l'application.
-function demoAccounts() {
-  return Object.keys(ROLES).map((role) => {
-    const w = walletFor(role);
-    return { name: `${ROLE_LABELS[role]} (démo)`, role, address: w.address, publicKey: w.signingKey.publicKey, demo: true };
-  });
+// Le contrat n'est visible qu'une fois ce nœud synchronisé avec le réseau : à rappeler tant que
+// `ready` est faux (nœud qui vient de rejoindre, ou qui n'a encore aucun pair).
+async function attach() {
+  const address = config.get().contract;
+  if (chain.ready || !address) return chain.ready;
+  if ((await chain.provider.getCode(address)) === "0x") return false;
+  chain.address = address;
+  chain.contract = new ethers.Contract(address, abi, chain.provider);
+  store.init(besu.CHAIN_ID, address);
+  return (chain.ready = true);
 }
 
-function listAccounts() {
-  return [...demoAccounts(), ...store.listAccounts().map(({ privateKey, ...pub }) => pub)];
+// Création du réseau : le fondateur déploie le contrat et en devient le Gestionnaire.
+async function deploy(wallet, managerName) {
+  const factory = new ethers.ContractFactory(abi, bytecode, wallet.connect(chain.provider));
+  const c = await factory.deploy(managerName, GAS);
+  await c.waitForDeployment();
+  return c.getAddress();
 }
 
-function describe(addr) {
-  return listAccounts().find((a) => a.address.toLowerCase() === String(addr).toLowerCase());
-}
-
-const wallets = {};
-function walletOf(addr) {
-  const key = String(addr).toLowerCase();
-  if (!wallets[key]) {
-    const demo = Object.keys(ROLES).find((r) => walletFor(r).address.toLowerCase() === key);
-    const created = store.listAccounts().find((a) => a.address.toLowerCase() === key);
-    if (!demo && !created) throw new Error(`Compte inconnu : ${addr}`);
-    wallets[key] = (demo ? walletFor(demo) : new ethers.Wallet(created.privateKey)).connect(provider);
+// ───────────── Annuaire (lu sur la blockchain) ─────────────
+// Noms, rôles et demandes d'accès sont dans le contrat : chaque machine voit le même annuaire,
+// sans serveur central.
+let cache = { at: 0, list: [] };
+async function members() {
+  if (Date.now() - cache.at > 1500) {
+    const list = (await chain.contract.getMembers()).map((m) => ({
+      address: m.account, name: m.name, role: ROLE_KEYS[Number(m.role)], requested: ROLE_KEYS[Number(m.requested)],
+    }));
+    cache = { at: Date.now(), list };
   }
-  return wallets[key];
+  return cache.list;
 }
 
-const defaultAccount = (role) => walletFor(role).address;
+async function describe(addr) {
+  const key = String(addr).toLowerCase();
+  const m = (await members()).find((x) => x.address.toLowerCase() === key);
+  if (m) return m;
+  // Les nœuds signent aussi (vérification automatique des délais) : on les reconnaît par leur adresse.
+  const me = besu.identity();
+  const node = [{ validator: me.validator, name: config.get().nodeName }, ...(config.get().peers || [])]
+    .find((n) => n.validator.toLowerCase() === key);
+  return node ? { address: addr, name: `Nœud ${node.name}`, node: true } : undefined;
+}
+
+async function who(addr) {
+  const a = await describe(addr);
+  if (!a) return addr;
+  return a.role ? `${a.name} (${ROLE_LABELS[a.role]})` : a.name;
+}
 
 // ───────────── Réseau et consensus ─────────────
 async function networkInfo() {
-  const [block, peers, client] = await Promise.all([
-    provider.getBlockNumber(),
-    provider.send("net_peerCount", []).then(Number).catch(() => 0),
-    provider.send("web3_clientVersion", []).catch(() => "inconnu"),
+  const [block, peers, client, validators] = await Promise.all([
+    chain.provider.getBlockNumber(),
+    chain.provider.send("net_peerCount", []).then(Number),
+    chain.provider.send("web3_clientVersion", []),
+    chain.provider.send("qbft_getValidatorsByBlockNumber", ["latest"]),
   ]);
-  let validators = null;
-  try { validators = await provider.send("qbft_getValidatorsByBlockNumber", ["latest"]); } catch {}
-  const consensus = validators
-    ? { name: "QBFT", quorum: Math.ceil((2 * validators.length) / 3), validators }
-    : { name: "Aucun (nœud unique Hardhat)", quorum: 1, validators: [] };
-  return { chainId: net.chainId, rpc: RPC_URL, client, block, peers, contract: address, freeGas: net.freeGas, consensus };
+  return {
+    name: config.get().networkName, chainId: besu.CHAIN_ID, client, block, peers, contract: chain.address,
+    consensus: { name: "QBFT", quorum: Math.ceil((2 * validators.length) / 3), validators },
+  };
 }
 
 // ───────────── Transactions ─────────────
@@ -98,16 +111,11 @@ const CHECKS = {
   raiseDispute: ["l'appelant a le rôle Destinataire", "c'est bien le destinataire de ce lot", "le lot n'est pas clôturé"],
   setRules: ["l'appelant a le rôle Gestionnaire", "seuils cohérents (min ≤ max)"],
   grantRole: ["l'appelant a le rôle Gestionnaire"],
+  requestAccess: ["rôle demandé valide", "nom renseigné (64 caractères au plus)"],
   checkDeadline: ["le lot n'est pas clôturé", "date limite comparée à l'heure du bloc"],
 };
 
 const step = (title, detail, kind = "") => ({ title, detail, kind });
-
-function who(addr) {
-  const a = describe(addr);
-  if (!a) return addr;
-  return a.demo ? a.name : `${a.name} (${ROLE_LABELS[a.role]})`;
-}
 
 function fmtValue(v) {
   if (typeof v === "bigint") return v.toString();
@@ -128,18 +136,17 @@ function recoverPublicKey(tx) {
 }
 
 async function blockStep(receipt) {
-  const b = await provider.getBlock(receipt.blockNumber);
-  const info = await networkInfo();
-  const consensus = info.consensus.validators.length
-    ? `Proposé par le validateur ${b.miner}, puis approuvé par au moins ${info.consensus.quorum} des ${info.consensus.validators.length} validateurs (QBFT). Le bloc est final immédiatement.`
-    : "Un seul nœud (Hardhat) : il produit le bloc immédiatement, sans vote. C'est le rôle que joueront les 4 validateurs Besu.";
+  const b = await chain.provider.getBlock(receipt.blockNumber);
+  const { quorum, validators } = (await networkInfo()).consensus;
+  const consensus = `Proposé par le validateur ${await who(b.miner)}, puis approuvé par au moins ${quorum} des ${validators.length} validateurs (QBFT). Le bloc est final immédiatement.`;
   return step(`Inscrite dans le bloc #${b.number}`,
     `Hash du bloc ${b.hash}\nHash du bloc précédent ${b.parentHash} (c'est ce lien qui forme la chaîne : modifier un ancien bloc casserait tous les suivants)\n${consensus}`);
 }
 
-// Envoie une transaction et renvoie le détail de chaque étape. `before` : étapes déjà faites (hash...).
-function send(from, method, args, { before = [] } = {}) {
-  const wallet = walletOf(from);
+// Envoie une transaction signée par `wallet` et renvoie le détail de chaque étape.
+// `before` : étapes déjà faites (hash...).
+function send(wallet, method, args, { before = [] } = {}) {
+  const { contract, address } = chain;
   const steps = [...before];
   const fragment = contract.interface.getFunction(method);
   const shown = fragment.inputs.map((p, i) => `${p.name} = ${fmtValue(args[i])}`).join(", ");
@@ -148,22 +155,23 @@ function send(from, method, args, { before = [] } = {}) {
   return enqueue(wallet.address, async () => {
     let tx;
     try {
-      tx = await contract.connect(wallet)[method](...args, net.freeGas ? { gasPrice: 0 } : {});
+      tx = await contract.connect(wallet.connect(chain.provider))[method](...args, GAS);
     } catch (e) {
       steps.push(step("Refusée par le Smart Contract",
         `Le nœud a simulé la transaction et le contrat l'a rejetée : « ${reason(e)} ».\nRien n'a été inscrit sur la blockchain.`, "bad"));
       throw Object.assign(new Error(reason(e)), { steps });
     }
+    steps.push(step("Diffusée au réseau", `Hash de la transaction : ${tx.hash}\nLe nœud de cette machine la transmet à ses pairs ; le prochain validateur désigné l'inclut dans son bloc.`));
     const receipt = await tx.wait();
+    cache.at = 0; // l'annuaire a pu changer
     const sig = tx.signature;
     const pub = recoverPublicKey(tx);
-    const account = describe(wallet.address);
-    steps.push(step(`Signée par ${who(wallet.address)}`,
-      `Signature ECDSA avec sa clé privée (qui ne quitte jamais le signataire).\nr = ${sig.r}\ns = ${sig.s}\n` +
+    steps.push(step(`Signée par ${await who(wallet.address)}`,
+      `Signature ECDSA avec sa clé privée (qui ne quitte jamais cette machine).\nr = ${sig.r}\ns = ${sig.s}\n` +
       `Les nœuds retrouvent la clé publique à partir de la signature : ${pub}\n` +
-      (account && pub === account.publicKey ? "✓ Elle correspond à la clé publique du compte : l'auteur est prouvé." : "")));
+      (pub && ethers.computeAddress(pub) === wallet.address ? `✓ L'adresse dérivée de cette clé publique est bien ${wallet.address} : l'auteur est prouvé.` : "")));
     steps.push(step("Exécutée par le Smart Contract sur chaque nœud",
-      `Contrôles passés : ${(CHECKS[method] || []).join(" ; ")}.\nGaz consommé : ${receipt.gasUsed}${net.freeGas ? " (gratuit sur ce réseau)" : ""}.`, "ok"));
+      `Contrôles passés : ${(CHECKS[method] || []).join(" ; ")}.\nGaz consommé : ${receipt.gasUsed} (gratuit sur ce réseau).`, "ok"));
     steps.push(await blockStep(receipt));
 
     const events = receipt.logs
@@ -176,12 +184,6 @@ function send(from, method, args, { before = [] } = {}) {
     }
     return { txHash: receipt.hash, block: receipt.blockNumber, events, steps };
   });
-}
-
-// Transfert d'ETH (financement d'un nouveau compte sur un réseau où le gaz est payant).
-function fund(to, amount = "10") {
-  const manager = walletOf(defaultAccount("manager"));
-  return enqueue(manager.address, async () => (await manager.sendTransaction({ to, value: ethers.parseEther(amount) })).wait());
 }
 
 // Message lisible à partir d'un revert Solidity (ex: "Role non autorise").
@@ -198,33 +200,34 @@ function plain(v) {
 }
 
 async function readLot(id) {
-  const lot = plain((await contract.getLot(id)).toObject());
+  const lot = plain((await chain.contract.getLot(id)).toObject());
   return { ...lot, statusLabel: STATUS[lot.status] };
 }
 
 // ───────────── Explorateur de blocs ─────────────
 async function explore(count = 10) {
+  const { provider, contract } = chain;
   const latest = await provider.getBlockNumber();
   const blocks = [];
   for (let n = latest; n >= Math.max(0, latest - count + 1); n--) {
     const b = await provider.getBlock(n, true);
     blocks.push({
-      number: b.number, hash: b.hash, parentHash: b.parentHash, timestamp: b.timestamp, miner: b.miner,
-      txs: b.prefetchedTransactions.map((tx) => {
+      number: b.number, hash: b.hash, parentHash: b.parentHash, timestamp: b.timestamp, miner: b.miner, proposer: await who(b.miner),
+      txs: await Promise.all(b.prefetchedTransactions.map(async (tx) => {
         let call = null;
         try {
           const p = contract.interface.parseTransaction({ data: tx.data, value: tx.value });
           if (p) call = `${p.name}(${p.fragment.inputs.map((x, i) => `${x.name}: ${fmtValue(p.args[i])}`).join(", ")})`;
         } catch {}
-        if (!call) call = tx.to ? `Transfert de ${ethers.formatEther(tx.value)} ETH` : "Déploiement du contrat";
-        return { hash: tx.hash, from: tx.from, signer: who(tx.from), publicKey: recoverPublicKey(tx), call };
-      }),
+        if (!call) call = tx.to ? "Transaction vers un autre contrat" : "Déploiement du contrat";
+        return { hash: tx.hash, from: tx.from, signer: await who(tx.from), publicKey: recoverPublicKey(tx), call };
+      })),
     });
   }
   return blocks;
 }
 
-module.exports = {
-  provider, contract, address, net, STATUS, ROLE_IDS, ROLE_LABELS,
-  init, listAccounts, describe, defaultAccount, networkInfo, send, fund, step, reason, plain, readLot, explore,
-};
+module.exports = Object.assign(chain, {
+  STATUS, ROLE_IDS, ROLE_LABELS,
+  connect, attach, deploy, members, describe, who, networkInfo, send, step, reason, plain, readLot, explore,
+});

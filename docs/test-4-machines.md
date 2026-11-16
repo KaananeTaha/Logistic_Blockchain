@@ -2,47 +2,47 @@
 
 *Décision du debrief : « tester le déploiement sur 4 machines ».*
 
-Installation et commandes : [network/README.md](../network/README.md). Remplir la colonne « Résultat » pendant le test et l'apporter au prochain debrief.
+Tout se fait depuis l'application ([README](../README.md#lancer-lapplication), [reseau.md](reseau.md)). Remplir la colonne « Résultat » pendant le test et l'apporter au prochain debrief.
 
 ## Préparation
 
-| Machine | Membre | Système | IP | Java 25+ | Besu installé |
+| Machine | Membre | Système | Node 18+ | `npm install --omit=dev` fait | Adresse IP |
 |---|---|---|---|---|---|
-| 1 (amorçage) | | | | ☐ | ☐ |
-| 2 | | | | ☐ | ☐ |
-| 3 | | | | ☐ | ☐ |
-| 4 | | | | ☐ | ☐ |
+| 1 (crée le réseau) | | | ☐ | ☐ | |
+| 2 | | | ☐ | ☐ | |
+| 3 | | | ☐ | ☐ | |
+| 4 | | | ☐ | ☐ | |
 
-Conseil : faire d'abord la **répétition sur une seule machine** (`npm run network:local`, test 0), pour isoler les problèmes d'installation des problèmes de réseau.
+- Les 4 machines sur le même réseau. **Éviter le Wi-Fi de l'école** s'il isole les appareils : partage de connexion d'un téléphone, ou Tailscale.
+- Chaque machine lance une première fois l'application **avec Internet** pour télécharger Java et Besu (environ 250 Mo). On peut le faire la veille : créer un réseau d'essai seul, puis Réseau > Quitter le réseau.
+- Date et heure en réglage automatique sur les 4 machines.
+
+Conseil : faire d'abord la répétition sur une seule machine (test 0), pour séparer les problèmes d'installation des problèmes de réseau.
 
 ## Tests
 
 | # | Test | Procédure | Résultat attendu | Résultat |
 |---|---|---|---|---|
-| 0 | Répétition locale | `npm run network:local` puis `npm run network:status` sur une machine | 4 nœuds joignables, 3 pairs chacun, numéros de bloc qui avancent ensemble | **Réussi le 26/10** (MacBook Air, macOS 12) : 3 pairs, 4 validateurs, même bloc ; déploiement et scénario complet réussis |
-| 1 | Connexion | Lancer les 4 nœuds (`network:start`), puis `network:status` avec les 4 adresses | Chaque nœud : 3 pairs, 4 validateurs, même numéro de bloc (à 1 près) | |
-| 2 | Production de blocs | Relancer `network:status` après 10 s | Les numéros ont avancé d'environ 5 (1 bloc toutes les 2 s) ; le proposeur change d'un bloc à l'autre | |
-| 3 | Déploiement | `deploy:besu` depuis la machine 1, puis `npm start` | Contrat déployé ; en-tête de l'interface : « QBFT · 4 validateurs · 3 pairs » | |
-| 4 | Réplication | Créer un compte et un lot depuis l'interface de la machine 1. Lancer `npm start` sur la machine 3 avec `RPC_URL=http://<IP3>:8545` et le même `deployment.json` | Le lot et son historique apparaissent sur la machine 3 : la donnée a été répliquée par le réseau. Les données privées restent sur le serveur de la machine 1 (badge « introuvables » : normal) | |
-| 5 | Panne d'un nœud | Arrêter le nœud 4 (Ctrl+C), puis faire une action dans l'interface | L'action réussit : 3 validateurs sur 4 suffisent | |
-| 6 | Retour du nœud | Relancer le nœud 4 | Il rattrape les blocs manquants et retrouve le même numéro que les autres | |
-| 7 | Perte du quorum | Arrêter les nœuds 3 et 4, tenter une action | Plus aucun bloc n'est produit, l'action reste en attente ; aucune donnée incohérente | |
-| 8 | Reprise | Relancer les nœuds 3 et 4 | La production reprend. Si c'est long, redémarrer les 4 nœuds (recommandation de la doc Besu) | |
-| 9 | Persistance | Arrêter les 4 nœuds et le backend, puis tout relancer **sans redéployer** | Lots, historique, comptes et intégrité « ok » toujours présents | **Réussi le 26/10 sur une machine** : lots toujours présents après arrêt et relance. À refaire sur 4 machines |
-| 10 | Intégrité | Modifier un prix dans `backend/data/*.json` | La page du lot affiche « Données off-chain MODIFIÉES » | |
+| 0 | Répétition locale | 4 instances sur une machine ([README](../README.md#répéter-sur-une-seule-machine)), puis tests 1 à 9 | Identique aux attentes ci-dessous | **Réussi le 16/11** (MacBook, macOS 12, Besu 26.10.2) |
+| 1 | Création | Machine 1 : `npm start`, « Créer un réseau » | Nœud démarré, contrat déployé, connexion du Gestionnaire possible ; onglet Réseau : 1 validateur, adresse et code d'invitation affichés | |
+| 2 | Adhésion | Machines 2, 3, 4 : « Rejoindre un réseau » avec l'adresse et le code. Faire rejoindre la machine 4 **via la machine 2** | Sur chaque machine : 3 pairs connectés, même numéro de bloc, bandeau de synchronisation disparu | |
+| 3 | Diagnostic | Sur chaque machine : Réseau > Diagnostiquer les connexions | « Connecté » pour les 3 autres. Noter les ✗ éventuels dans la colonne « port entrant » (pare-feu) | |
+| 4 | Validateurs | Machine 1 vote pour 2 ; machines 1 et 2 votent pour 3 ; deux validateurs votent pour 4 | Onglet Réseau : 4 validateurs, « tolère 1 panne » ; dans l'onglet Blockchain, la machine qui propose change d'un bloc à l'autre | |
+| 5 | Comptes | Machines 2, 3, 4 : créer un compte Fournisseur, Transporteur, Destinataire. Machine 1 : valider les demandes | Les demandes apparaissent chez le Gestionnaire sans action de sa part ; l'onglet du rôle apparaît sur chaque machine | |
+| 6 | Réplication | Dérouler le scénario du [README](../README.md#scénario-de-démonstration), chaque acteur sur sa machine. Ou : `npm run demo -- … --apis …` depuis la machine 1 | Lot, étapes, mesures et litige visibles sur les 4 machines. Notes de transport lisibles partout. Données privées visibles seulement chez le Fournisseur | |
+| 7 | Panne d'un nœud | Fermer l'application de la machine 4, puis faire une action | L'action réussit (3 validateurs sur 4) ; machine 4 affichée « Non connecté » | |
+| 8 | Retour du nœud | Relancer la machine 4 | Elle rattrape les blocs manqués et retrouve ses 3 pairs sans aucune saisie | |
+| 9 | Perte du quorum | Fermer les machines 3 et 4, tenter une action ; les relancer après 3 minutes | « En pause » dans l'onglet Réseau, l'action reste en attente, aucune donnée incohérente. Au retour : reprise en une à deux minutes | |
+| 10 | Persistance | Fermer les 4 applications, puis tout relancer | Lots, historique, comptes et rôles toujours présents ; chaque utilisateur se reconnecte avec son mot de passe | |
+| 11 | Changement d'adresse | Changer une machine de réseau (ou couper puis rétablir son Wi-Fi), relancer son application | Elle se ré-annonce et retrouve ses pairs ; sinon Réseau > « Retrouver le réseau via l'adresse d'une machine » | |
+| 12 | Intégrité | Sur la machine du Fournisseur, modifier un prix dans `app-data/offchain/*.json` | La page du lot affiche « Données off-chain MODIFIÉES » | |
+| 13 | Accès sans nœud | Depuis un téléphone sur le même réseau : scanner le QR Code d'un lot | La page de traçabilité s'ouvre | |
+| 14 | Installation automatique | Sur une machine Windows sans Java ni Besu : premier lancement | Java et Besu téléchargés dans `app-data/tools/`, nœud démarré | |
 
-## Problèmes fréquents
-
-| Symptôme | Piste |
-|---|---|
-| `network:status` : 0 pair | Pare-feu (ports 30303 TCP+UDP), mauvaise IP dans `--ip` ou `--bootnode`, Wi-Fi qui isole les appareils (essayer un partage de connexion ou Tailscale) |
-| Les nœuds ont des numéros de bloc différents qui n'avancent pas | Génésis différent : tout le monde doit utiliser le même `genesis.json` |
-| Aucun bloc produit | Moins de 3 nœuds connectés : vérifier les pairs |
-| `Besu introuvable` | Définir `BESU_BIN` (voir network/README.md) |
-| Machine très lente | Besu consomme beaucoup de mémoire : `BESU_OPTS=-Xmx1g` |
+En cas de blocage : [reseau.md, section Dépannage](reseau.md#dépannage).
 
 ## À rapporter au client
 
 - Tableau ci-dessus rempli.
-- Captures : `network:status` avec les 4 nœuds, onglet Blockchain (validateurs, blocs), test 5 réussi.
+- Captures : onglet Réseau avec les 4 validateurs, résultat du diagnostic, onglet Blockchain (proposeurs qui alternent), test 7 réussi.
 - Problèmes rencontrés et solutions.
