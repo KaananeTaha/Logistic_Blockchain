@@ -35,7 +35,19 @@ contract LogisticsTraceability {
         bytes32 noteHash;        // hash d'un détail off-chain (lieu, douane...)
     }
 
+    /// Fiche d'annuaire : qui est derrière une adresse, quel rôle il a, quel rôle il demande.
+    struct Member {
+        address account;
+        string name;
+        Role role;
+        Role requested;
+    }
+
     mapping(address => Role) public roles;
+    mapping(address => string) public names;      // annuaire public : nom de l'acteur
+    mapping(address => Role) public requested;    // rôle demandé, en attente du Gestionnaire
+    mapping(address => bool) private known;
+    address[] private members;
     mapping(bytes32 => Lot) private lots;
     mapping(bytes32 => TraceEvent[]) private history;
     mapping(address => uint256) private nonces;
@@ -43,6 +55,7 @@ contract LogisticsTraceability {
 
     // ───────────── Événements (lus par le backend / dashboard) ─────────────
     event RoleGranted(address indexed account, Role role);
+    event AccessRequested(address indexed account, Role role, string name);
     event LotCreated(bytes32 indexed lotId, address indexed supplier, address indexed recipient);
     event StatusUpdated(bytes32 indexed lotId, Status status, address actor);
     event SensorReading(bytes32 indexed lotId, int16 temperature, int32 lat, int32 lon, uint64 timestamp);
@@ -67,15 +80,47 @@ contract LogisticsTraceability {
         _;
     }
 
-    constructor() {
+    constructor(string memory managerName) {
         roles[msg.sender] = Role.Manager; // le déployeur = Gestionnaire (MOA)
+        names[msg.sender] = managerName;
+        _remember(msg.sender);
         emit RoleGranted(msg.sender, Role.Manager);
     }
 
+    function _remember(address account) internal {
+        if (!known[account]) {
+            known[account] = true;
+            members.push(account);
+        }
+    }
+
     // ───────────── Fct8 : gestion des accès et paramétrage ─────────────
+    /// @notice Étape 1 du parcours : n'importe quelle adresse peut se présenter (nom + rôle souhaité).
+    ///         Elle n'obtient aucun droit : c'est le Gestionnaire qui décide, avec grantRole.
+    function requestAccess(Role role, string calldata name) external {
+        require(role != Role.None, "Role invalide");
+        require(bytes(name).length > 0 && bytes(name).length <= 64, "Nom invalide");
+        names[msg.sender] = name;
+        requested[msg.sender] = role;
+        _remember(msg.sender);
+        emit AccessRequested(msg.sender, role, name);
+    }
+
+    /// @notice Le Gestionnaire attribue (ou retire, avec None) un rôle ; la demande en attente est soldée.
     function grantRole(address account, Role role) external onlyRole(Role.Manager) {
         roles[account] = role;
+        requested[account] = Role.None;
+        _remember(account);
         emit RoleGranted(account, role);
+    }
+
+    /// @notice Annuaire complet : lu par l'interface de chaque machine, sans serveur central.
+    function getMembers() external view returns (Member[] memory list) {
+        list = new Member[](members.length);
+        for (uint256 i = 0; i < members.length; i++) {
+            address a = members[i];
+            list[i] = Member(a, names[a], roles[a], requested[a]);
+        }
     }
 
     function setRules(bytes32 id, int16 minTemp, int16 maxTemp, uint64 deadline)

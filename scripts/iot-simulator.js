@@ -1,19 +1,19 @@
 // Simule le capteur embarqué d'un camion frigorifique sur le trajet Casablanca → Benguerir → Marrakech.
-// Usage : npm run iot -- <lotId> [--break] [--steps 10] [--interval 2] [--account 0x…]
+// Usage : npm run iot -- <lotId> --user "<compte Transporteur>" --password <mot de passe> [--break] [--steps 10] [--interval 2]
+//   Le capteur parle à la passerelle au nom d'un Transporteur : il ouvre d'abord une session.
 //   --break : à mi-parcours, la température dépasse le seuil (panne du groupe froid).
 const API = process.env.API_URL || "http://localhost:3000";
 
 const args = process.argv.slice(2);
 const optStr = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
-const account = optStr("account"); // compte Transporteur qui signe (défaut : compte de démo)
-const lotId = args.find((a) => a.startsWith("0x") && a !== account);
+const lotId = args.find((a) => /^0x[0-9a-f]{64}$/i.test(a));
 const opt = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? Number(args[i + 1]) : def; };
 const steps = opt("steps", 10);
 const intervalS = opt("interval", 2);
 const breakChain = args.includes("--break");
 
-if (!lotId) {
-  console.error("Usage : npm run iot -- <lotId> [--break] [--steps 10] [--interval 2]");
+if (!lotId || !optStr("user") || !optStr("password")) {
+  console.error('Usage : npm run iot -- <lotId> --user "<compte Transporteur>" --password <mot de passe> [--break] [--steps 10] [--interval 2]');
   process.exit(1);
 }
 
@@ -27,6 +27,12 @@ function position(t) { // t entre 0 et 1, interpolation linéaire sur les étape
 }
 
 async function main() {
+  const login = await (await fetch(`${API}/api/auth/login`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ account: optStr("user"), password: optStr("password") }),
+  })).json();
+  if (login.error) throw new Error(login.error);
+
   const { lot } = await (await fetch(`${API}/api/lots/${lotId}`)).json();
   const [min, max] = [lot.minTemp / 10, lot.maxTemp / 10];
   console.log(`Lot ${lotId.slice(0, 10)}… (${lot.nature}), plage tolérée ${min}–${max} °C`);
@@ -40,8 +46,8 @@ async function main() {
 
     const r = await (await fetch(`${API}/api/iot/${lotId}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ account, temperature: +temperature.toFixed(1), lat, lon }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${login.token}` },
+      body: JSON.stringify({ temperature: +temperature.toFixed(1), lat, lon }),
     })).json();
 
     if (r.error) { console.error("  ✖", r.error); process.exit(1); }
