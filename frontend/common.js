@@ -5,6 +5,8 @@ const ROLE_LABELS = {
   carrier: "Transporteur / Logisticien", recipient: "Destinataire / Client final",
 };
 
+const ROLE_IDS = { supplier: 1, carrier: 2, manager: 3, recipient: 4 }; // enum Role du contrat
+
 // Les erreurs gardent les étapes déjà franchies (affichées dans les coulisses).
 async function api(path, body) {
   const r = await fetch(`/api${path}`, body === undefined ? {} : {
