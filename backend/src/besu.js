@@ -188,7 +188,7 @@ let round = 0;
 const PIDFILE = path.join(paths.home, "besu.pid");
 const tail = []; // dernières lignes du journal, sans codes couleur
 
-function writeToml(bootnodes) {
+function writeToml() {
   const c = config.get();
   const s = JSON.stringify; // chaîne TOML valide, y compris pour les chemins Windows
   fs.writeFileSync(paths.besuToml, [
@@ -199,8 +199,9 @@ function writeToml(bootnodes) {
     `p2p-host=${s(c.host)}`,
     `p2p-port=${c.p2pPort}`,
     'nat-method="NONE"',
-    // Dans un fichier, la liste des pairs ne pose plus de problème de guillemets (Windows).
-    `bootnodes=[${bootnodes.map(s).join(",")}]`,
+    // Pas de « bootnodes » : sous Windows, Besu lit chaque valeur comme un chemin de fichier et refuse le
+    // « : » de « enode:// » (« Illegal char <:> at index 5 »), même dans ce fichier. Les pairs sont
+    // ajoutés après le démarrage par admin_addPeer (voir start() et peers.maintain()).
     "rpc-http-enabled=true",
     'rpc-http-host="127.0.0.1"',
     `rpc-http-port=${c.rpcPort}`,
@@ -225,7 +226,8 @@ async function rpc(method, params = [], timeout = 5000) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function start(bootnodes, say = () => {}) {
+// `peers` : adresses enode des nœuds connus, auxquels on se connecte dès que le nœud répond.
+async function start(peers, say = () => {}) {
   const me = identity();
   // Un nœud de cette application tourne déjà (l'application a été fermée brutalement) : on le reprend.
   const running = await rpc("admin_nodeInfo", [], 1500).catch(() => null);
@@ -238,7 +240,7 @@ async function start(bootnodes, say = () => {}) {
   }
   fs.rmSync(PIDFILE, { force: true }); // reste d'une session précédente : ce processus n'existe plus
   const besu = locate(true) || await install(say);
-  writeToml(bootnodes);
+  writeToml();
   say("Démarrage du nœud Besu…");
   round = 0;
   const log = fs.createWriteStream(paths.besuLog, { flags: "a" });
@@ -264,7 +266,10 @@ async function start(bootnodes, say = () => {}) {
 
   for (let i = 0; i < 120; i++) { // la JVM met quelques secondes à démarrer
     if (exited) throw new Error(`Besu s'est arrêté au démarrage (${exited}) :\n${tail.slice(-6).join("\n")}`);
-    if (await rpc("net_version", [], 1000).catch(() => null)) return;
+    if (await rpc("net_version", [], 1000).catch(() => null)) {
+      await Promise.all(peers.map((e) => rpc("admin_addPeer", [e]).catch(() => {})));
+      return;
+    }
     await sleep(1000);
   }
   throw new Error("Besu ne répond pas après 2 minutes. Journal : " + paths.besuLog);
